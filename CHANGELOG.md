@@ -25,3 +25,16 @@
 - SQLite database integration
 - OOP architecture with command pattern
 - GitHub repository setup
+
+## [Fixed] - 2023-11-06
+### Fixed
+- Duplicate URL detection now works correctly
+- Semantic search properly finds "programming" when searching "coding"
+- Category management issues resolved
+- Enhanced URL normalization for better duplicate detection
+- Improved error handling and user suggestions
+
+### Changed
+- Better semantic mapping with reverse lookup
+- Search algorithm with multiple fallback strategies
+- Preserve original category when updating duplicates
