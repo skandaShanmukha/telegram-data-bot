@@ -258,18 +258,45 @@ class ResourceService {
     };
   }
 
+
+  async getAllJobs() {
+    await this.init();
+    const data = await this._read();
+    return data.jobs || [];
+  }
+
   async getAllActiveJobs() {
     await this.init();
     const data = await this._read();
-    const now = new Date();
     
-    if (!data.jobs) return [];
+    console.log('📊 Total jobs in DB:', data.jobs ? data.jobs.length : 0);
+    
+    if (!data.jobs || data.jobs.length === 0) {
+        console.log('No jobs array or empty jobs array');
+        return [];
+    }
 
-    return data.jobs.filter(job => 
-      job.status === 'active' && 
-      new Date(job.end_date) > now
-    );
-  }
+    const now = new Date();
+    console.log('Current time:', now.toISOString());
+    
+    const activeJobs = data.jobs.filter(job => {
+        if (job.status !== 'active') {
+            console.log('Job not active:', job.title);
+            return false;
+        }
+        
+        const endDate = new Date(job.end_date);
+        console.log(`Job: ${job.title}, End Date: ${endDate.toISOString()}, Now: ${now.toISOString()}`);
+        
+        const isActive = endDate > now;
+        console.log(`Is active: ${isActive}`);
+        
+        return isActive;
+    });
+    
+    console.log('✅ Active jobs after filtering:', activeJobs.length);
+    return activeJobs;
+   }
 
   async getJobsEndingSoon() {
     await this.init();
@@ -302,18 +329,53 @@ class ResourceService {
   }
 
   parseDate(dateString) {
-    // Support formats: 16-7-2025, 16/7/2025, 2025-7-16
-    const parts = dateString.split(/[-/]/);
-    if (parts.length === 3) {
-      if (parts[2].length === 4) {
-        // Format: DD-MM-YYYY or DD/MM/YYYY
-        return new Date(parts[2], parts[1] - 1, parts[0]).toISOString();
-      } else {
-        // Format: YYYY-MM-DD
-        return new Date(parts[0], parts[1] - 1, parts[2]).toISOString();
-      }
+    try {
+        // Remove any quotes or extra spaces
+        dateString = dateString.replace(/['"]/g, '').trim();
+        
+        const parts = dateString.split(/[-/]/);
+        if (parts.length !== 3) {
+            throw new Error('Invalid date format');
+        }
+
+        let day, month, year;
+
+        // Handle DD-MM-YYYY or DD/MM/YYYY format
+        if (parts[0].length <= 2 && parts[2].length === 4) {
+            day = parseInt(parts[0]);
+            month = parseInt(parts[1]) - 1; // Months are 0-indexed in JavaScript
+            year = parseInt(parts[2]);
+        }
+        // Handle YYYY-MM-DD format
+        else if (parts[0].length === 4 && parts[2].length <= 2) {
+            year = parseInt(parts[0]);
+            month = parseInt(parts[1]) - 1;
+            day = parseInt(parts[2]);
+        }
+        else {
+            throw new Error('Unrecognized date format');
+        }
+
+        // Validate date components
+        if (isNaN(day) || isNaN(month) || isNaN(year)) {
+            throw new Error('Invalid date numbers');
+        }
+
+        if (day < 1 || day > 31) throw new Error('Invalid day');
+        if (month < 0 || month > 11) throw new Error('Invalid month');
+        if (year < 2000 || year > 2100) throw new Error('Invalid year');
+
+        const date = new Date(Date.UTC(year, month, day));
+        
+        if (isNaN(date.getTime())) {
+            throw new Error('Invalid date');
+        }
+
+        return date.toISOString();
+    } catch (error) {
+        console.error('Date parsing error:', error.message, 'for date:', dateString);
+        throw new Error(`Invalid date format: ${dateString}. Use DD-MM-YYYY or YYYY-MM-DD`);
     }
-    throw new Error('Invalid date format. Use DD-MM-YYYY or YYYY-MM-DD');
   }
 
   formatDate(dateString) {

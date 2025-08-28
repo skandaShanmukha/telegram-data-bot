@@ -55,6 +55,61 @@
       "description": "Free netflix alternative which has more shows and movies than netflix. It has variety of genre and good quality content without ads.",
       "user_id": 1671882611,
       "created_at": "2025-08-28T10:24:06.418Z"
+    },
+    {
+      "id": "1756400800752dvoajnpym",
+      "category": "programming",
+      "url": "https://www.codeconvert.ai/free-code-explainer",
+      "description": "Explains code in multiple languages and even gives tips.",
+      "user_id": 1671882611,
+      "created_at": "2025-08-28T17:06:40.752Z",
+      "updated_at": "2025-08-28T17:06:40.752Z"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "1756399087527o8gvzugut",
+      "title": "IBPS_BANK",
+      "official_url": "https://ibps.com/",
+      "start_date": "2025-07-15T18:30:00.000Z",
+      "end_date": "2025-07-24T18:30:00.000Z",
+      "description": "Banking recruitment for clerk posts",
+      "posted_by": 1671882611,
+      "created_at": "2025-08-28T16:38:07.528Z",
+      "status": "active"
+    },
+    {
+      "id": "17563991559211wk46zfye",
+      "title": "TCS_2024",
+      "official_url": "https://tcs.com/",
+      "start_date": "2023-12-31T18:30:00.000Z",
+      "end_date": "2024-01-30T18:30:00.000Z",
+      "description": "Software engineer recruitment",
+      "posted_by": 1671882611,
+      "created_at": "2025-08-28T16:39:15.921Z",
+      "status": "active"
+    },
+    {
+      "id": "17564003787654tj2blb1i",
+      "title": "TEST_JOB",
+      "official_url": "https://example.com",
+      "start_date": "2024-08-28T00:00:00.000Z",
+      "end_date": "2024-08-30T00:00:00.000Z",
+      "description": "Test job for debugging",
+      "posted_by": 1671882611,
+      "created_at": "2025-08-28T16:59:38.766Z",
+      "status": "active"
+    },
+    {
+      "id": "1756400559425jd5dtfwh3",
+      "title": "TEST_JOB",
+      "official_url": "https://example.com",
+      "start_date": "2025-08-28T00:00:00.000Z",
+      "end_date": "2025-09-30T00:00:00.000Z",
+      "description": "Test job for debugging",
+      "posted_by": 1671882611,
+      "created_at": "2025-08-28T17:02:39.425Z",
+      "status": "active"
     }
   ]
 }
