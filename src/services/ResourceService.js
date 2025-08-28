@@ -27,21 +27,24 @@ class ResourceService {
     }
   }
 
+ 
   async _read() {
     try {
-      const data = await fs.readFile(this.file, 'utf8');
-      const parsed = JSON.parse(data);
-      parsed.resources = Array.isArray(parsed.resources) ? parsed.resources : [];
-      return parsed;
+        const data = await fs.readFile(this.file, 'utf8');
+        const parsed = JSON.parse(data);
+        parsed.resources = Array.isArray(parsed.resources) ? parsed.resources : [];
+        parsed.jobs = Array.isArray(parsed.jobs) ? parsed.jobs : []; // Ensure jobs array exists
+        return parsed;
     } catch (error) {
-      if (error.code === 'ENOENT') {
-        return { resources: [] };
-      }
-      console.warn('Database file corrupted, recreating...', error);
-      await fs.writeFile(this.file, JSON.stringify({ resources: [] }));
-      return { resources: [] };
+        if (error.code === 'ENOENT') {
+            return { resources: [], jobs: [] }; // Include jobs in default structure
+        }
+        console.warn('Database file corrupted, recreating...', error);
+        await fs.writeFile(this.file, JSON.stringify({ resources: [], jobs: [] }));
+        return { resources: [], jobs: [] };
     }
   }
+
 
   async _write(data) {
     const tmpFile = `${this.file}.tmp`;
@@ -222,6 +225,106 @@ class ResourceService {
       .slice(0, limit)
       .map(({ url, description }) => ({ url, description }));
   }
+
+
+  // JOB POSTING METHODS
+  async addJob(title, official_url, start_date, end_date, description, userId = null) {
+    await this.init();
+    const data = await this._read();
+
+    // Ensure jobs array exists
+    if (!data.jobs) {
+      data.jobs = [];
+    }
+
+    const newJob = {
+      id: Date.now() + Math.random().toString(36).substr(2, 9),
+      title,
+      official_url: official_url.startsWith('http') ? official_url : `https://${official_url}`,
+      start_date: this.parseDate(start_date),
+      end_date: this.parseDate(end_date),
+      description,
+      posted_by: userId,
+      created_at: new Date().toISOString(),
+      status: 'active'
+    };
+
+    data.jobs.push(newJob);
+    await this._write(data);
+
+    return { 
+      id: newJob.id,
+      message: `✅ Job posting added: ${title}`
+    };
+  }
+
+  async getAllActiveJobs() {
+    await this.init();
+    const data = await this._read();
+    const now = new Date();
+    
+    if (!data.jobs) return [];
+
+    return data.jobs.filter(job => 
+      job.status === 'active' && 
+      new Date(job.end_date) > now
+    );
+  }
+
+  async getJobsEndingSoon() {
+    await this.init();
+    const data = await this._read();
+    const now = new Date();
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    
+    if (!data.jobs) return [];
+
+    return data.jobs.filter(job => 
+      job.status === 'active' && 
+      new Date(job.end_date) > now &&
+      new Date(job.end_date) <= sevenDaysFromNow
+    );
+  }
+
+  async getJobsStartingSoon() {
+    await this.init();
+    const data = await this._read();
+    const now = new Date();
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    
+    if (!data.jobs) return [];
+
+    return data.jobs.filter(job => 
+      job.status === 'active' && 
+      new Date(job.start_date) > now &&
+      new Date(job.start_date) <= sevenDaysFromNow
+    );
+  }
+
+  parseDate(dateString) {
+    // Support formats: 16-7-2025, 16/7/2025, 2025-7-16
+    const parts = dateString.split(/[-/]/);
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        // Format: DD-MM-YYYY or DD/MM/YYYY
+        return new Date(parts[2], parts[1] - 1, parts[0]).toISOString();
+      } else {
+        // Format: YYYY-MM-DD
+        return new Date(parts[0], parts[1] - 1, parts[2]).toISOString();
+      }
+    }
+    throw new Error('Invalid date format. Use DD-MM-YYYY or YYYY-MM-DD');
+  }
+
+  formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  }
+
 }
 
 module.exports = ResourceService;
