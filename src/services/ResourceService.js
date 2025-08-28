@@ -10,17 +10,14 @@ class ResourceService {
     this.initialized = false;
   }
 
-  // Async initialization to avoid blocking
   async init() {
     if (this.initialized) return;
     
     try {
       await fs.mkdir(this.dir, { recursive: true });
       try {
-        // Try to read to check if file exists and is valid JSON
         await this._read();
       } catch (error) {
-        // File doesn't exist or is corrupt, create fresh
         await fs.writeFile(this.file, JSON.stringify({ resources: [] }));
       }
       this.initialized = true;
@@ -30,95 +27,144 @@ class ResourceService {
     }
   }
 
-  // Simplified read with better error handling
   async _read() {
     try {
       const data = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(data);
-      
-      // Validate structure
-      if (!parsed || typeof parsed !== 'object') {
-        throw new Error('Invalid JSON structure');
-      }
-      
       parsed.resources = Array.isArray(parsed.resources) ? parsed.resources : [];
       return parsed;
     } catch (error) {
       if (error.code === 'ENOENT') {
-        // File doesn't exist, return empty structure
         return { resources: [] };
       }
-      
-      // For corruption or other errors, recreate file
       console.warn('Database file corrupted, recreating...', error);
       await fs.writeFile(this.file, JSON.stringify({ resources: [] }));
       return { resources: [] };
     }
   }
 
-  // Simplified atomic write
   async _write(data) {
     const tmpFile = `${this.file}.tmp`;
     const content = JSON.stringify(data, null, 2);
     
     try {
-      // Write to temp file first
       await fs.writeFile(tmpFile, content);
-      // Atomic rename (this is atomic on most filesystems)
       await fs.rename(tmpFile, this.file);
     } catch (error) {
-      // Clean up temp file if rename failed
       try { await fs.unlink(tmpFile); } catch (e) {}
       throw error;
     }
   }
 
-  // Public methods with initialization check
+  // Check if URL already exists and return existing resource
+  async findDuplicate(url) {
+    await this.init();
+    const data = await this._read();
+    
+    // Normalize URL for comparison (remove protocol, www, etc.)
+    const normalizedUrl = this.normalizeUrl(url);
+    
+    return data.resources.find(resource => 
+      this.normalizeUrl(resource.url) === normalizedUrl
+    );
+  }
+
+  normalizeUrl(url) {
+    return url.toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/\/$/, ''); // Remove trailing slash
+  }
+
   async addResource(url, description = '', userId = null, userCategory = '') {
     await this.init();
     
+    // Check for duplicate
+    const existingResource = await this.findDuplicate(url);
+    if (existingResource) {
+      // Update existing resource instead of adding new one
+      return this.updateResource(existingResource.id, { description, category: userCategory });
+    }
+
     const data = await this._read();
     const category = userCategory 
       ? userCategory.toLowerCase() 
       : this.categorizer.categorize(description);
 
     const newResource = {
-      id: Date.now() + Math.random().toString(36).substr(2, 9), // More unique ID
+      id: Date.now() + Math.random().toString(36).substr(2, 9),
       category,
       url: url.startsWith('http') ? url : `https://${url}`,
       description,
       user_id: userId,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
 
     data.resources.push(newResource);
     await this._write(data);
 
-    return { category, added: true, id: newResource.id };
+    return { 
+      action: 'added', 
+      category, 
+      id: newResource.id,
+      message: `✅ Resource added to category: ${category}`
+    };
   }
 
-  async getResourcesByCategory(category, limit = 10) {
+  async updateResource(id, updates) {
+    await this.init();
+    const data = await this._read();
+    
+    const resourceIndex = data.resources.findIndex(r => r.id === id);
+    if (resourceIndex === -1) {
+      throw new Error('Resource not found');
+    }
+
+    // Update resource
+    data.resources[resourceIndex] = {
+      ...data.resources[resourceIndex],
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+
+    await this._write(data);
+
+    return {
+      action: 'updated',
+      id,
+      category: data.resources[resourceIndex].category,
+      message: `✅ Resource updated in category: ${data.resources[resourceIndex].category}`
+    };
+  }
+
+  // Unified search that understands semantic intent
+  async semanticSearch(query, limit = 10) {
     await this.init();
     
     const data = await this._read();
-    return data.resources
-      .filter(r => r.category === category)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, limit)
-      .map(({ url, description }) => ({ url, description }));
-  }
+    const searchTerm = query.toLowerCase();
+    
+    // 1. First try exact matches
+    let results = data.resources.filter(r =>
+      (r.description || '').toLowerCase().includes(searchTerm) ||
+      (r.category || '').toLowerCase().includes(searchTerm) ||
+      (r.url || '').toLowerCase().includes(searchTerm)
+    );
 
-  async searchResources(query, limit = 10) {
-    await this.init();
-    
-    const q = query.toLowerCase();
-    const data = await this._read();
-    
-    return data.resources
-      .filter(r => 
-        (r.description || '').toLowerCase().includes(q) ||
-        (r.category || '').toLowerCase().includes(q)
-      )
+    // 2. If no exact matches, try semantic categories
+    if (results.length === 0) {
+      const semanticCategories = this.categorizer.findSemanticCategories(searchTerm);
+      
+      if (semanticCategories.length > 0) {
+        results = data.resources.filter(r =>
+          semanticCategories.includes(r.category)
+        );
+      }
+    }
+
+    // 3. Sort by relevance (recent first)
+    return results
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, limit)
       .map(({ url, description, category }) => ({ url, description, category }));
@@ -126,25 +172,9 @@ class ResourceService {
 
   async getAllCategories() {
     await this.init();
-    
     const data = await this._read();
     const categories = [...new Set(data.resources.map(r => r.category).filter(Boolean))];
     return categories.sort();
-  }
-
-  // Optional: Add cleanup method for old entries
-  async cleanupOldEntries(maxAgeDays = 30) {
-    await this.init();
-    
-    const data = await this._read();
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - maxAgeDays);
-    
-    data.resources = data.resources.filter(
-      r => new Date(r.created_at) > cutoff
-    );
-    
-    await this._write(data);
   }
 }
 
