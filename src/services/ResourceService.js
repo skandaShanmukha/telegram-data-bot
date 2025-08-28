@@ -56,12 +56,11 @@ class ResourceService {
     }
   }
 
-  // Check if URL already exists and return existing resource
+  // FIXED: Better duplicate detection
   async findDuplicate(url) {
     await this.init();
     const data = await this._read();
     
-    // Normalize URL for comparison (remove protocol, www, etc.)
     const normalizedUrl = this.normalizeUrl(url);
     
     return data.resources.find(resource => 
@@ -70,22 +69,37 @@ class ResourceService {
   }
 
   normalizeUrl(url) {
+    // More comprehensive URL normalization
     return url.toLowerCase()
-      .replace(/^https?:\/\//, '')
-      .replace(/^www\./, '')
-      .replace(/\/$/, ''); // Remove trailing slash
+      .replace(/^https?:\/\/(www\.)?/, '') // Remove http/https and www
+      .replace(/\/$/, '') // Remove trailing slash
+      .split('?')[0] // Remove query parameters
+      .split('#')[0]; // Remove fragments
   }
 
+  // FIXED: Better add resource with proper duplicate handling
   async addResource(url, description = '', userId = null, userCategory = '') {
     await this.init();
     
-    // Check for duplicate
+    // Check for duplicate FIRST
     const existingResource = await this.findDuplicate(url);
+    
     if (existingResource) {
-      // Update existing resource instead of adding new one
-      return this.updateResource(existingResource.id, { description, category: userCategory });
+      // Update existing resource - preserve original category if no new category provided
+      const updates = { 
+        description,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Only update category if user explicitly provided one
+      if (userCategory && userCategory.trim()) {
+        updates.category = userCategory.toLowerCase();
+      }
+      
+      return this.updateResource(existingResource.id, updates);
     }
 
+    // If no duplicate, add new resource
     const data = await this._read();
     const category = userCategory 
       ? userCategory.toLowerCase() 
@@ -121,11 +135,9 @@ class ResourceService {
       throw new Error('Resource not found');
     }
 
-    // Update resource
     data.resources[resourceIndex] = {
       ...data.resources[resourceIndex],
-      ...updates,
-      updated_at: new Date().toISOString()
+      ...updates
     };
 
     await this._write(data);
@@ -138,21 +150,25 @@ class ResourceService {
     };
   }
 
-  // Unified search that understands semantic intent
+  // FIXED: Better semantic search
   async semanticSearch(query, limit = 10) {
     await this.init();
     
+    if (!query || query.trim() === '') {
+      return this.getAllResources(limit);
+    }
+
     const data = await this._read();
-    const searchTerm = query.toLowerCase();
+    const searchTerm = query.toLowerCase().trim();
     
-    // 1. First try exact matches
+    // 1. First try exact matches in description, category, and URL
     let results = data.resources.filter(r =>
       (r.description || '').toLowerCase().includes(searchTerm) ||
-      (r.category || '').toLowerCase().includes(searchTerm) ||
+      (r.category || '').toLowerCase() === searchTerm ||
       (r.url || '').toLowerCase().includes(searchTerm)
     );
 
-    // 2. If no exact matches, try semantic categories
+    // 2. If no exact matches, try semantic category mapping
     if (results.length === 0) {
       const semanticCategories = this.categorizer.findSemanticCategories(searchTerm);
       
@@ -163,8 +179,26 @@ class ResourceService {
       }
     }
 
-    // 3. Sort by relevance (recent first)
+    // 3. If still no results, try partial matches
+    if (results.length === 0) {
+      results = data.resources.filter(r =>
+        (r.description || '').toLowerCase().includes(searchTerm) ||
+        (r.category || '').toLowerCase().includes(searchTerm)
+      );
+    }
+
     return results
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, limit)
+      .map(({ url, description, category }) => ({ url, description, category }));
+  }
+
+  // NEW: Get all resources for empty search
+  async getAllResources(limit = 20) {
+    await this.init();
+    const data = await this._read();
+    
+    return data.resources
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, limit)
       .map(({ url, description, category }) => ({ url, description, category }));
@@ -175,6 +209,18 @@ class ResourceService {
     const data = await this._read();
     const categories = [...new Set(data.resources.map(r => r.category).filter(Boolean))];
     return categories.sort();
+  }
+
+  // NEW: Get resources by specific category
+  async getResourcesByCategory(category, limit = 10) {
+    await this.init();
+    const data = await this._read();
+    
+    return data.resources
+      .filter(r => r.category === category)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, limit)
+      .map(({ url, description }) => ({ url, description }));
   }
 }
 
