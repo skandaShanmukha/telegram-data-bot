@@ -18,7 +18,8 @@
 - Memory leaks in previous implementations
 - File corruption handling and recovery
 
-## [Initial Release] - 2023-11-05
+## [Initial Release] - 2025-08-28
+
 ### Added
 - Telegram bot with /add, /ask, /search commands
 - Basic NLP categorization engine
@@ -26,7 +27,7 @@
 - OOP architecture with command pattern
 - GitHub repository setup
 
-## [Fixed] - 2023-11-06
+## [Fixed] - 2025-08-28
 ### Fixed
 - Duplicate URL detection now works correctly
 - Semantic search properly finds "programming" when searching "coding"
@@ -38,3 +39,10 @@
 - Better semantic mapping with reverse lookup
 - Search algorithm with multiple fallback strategies
 - Preserve original category when updating duplicates
+
+## [Feature] - 2025-08-28
+
+### Added
+- Telegram bot with /job, /jobs
+- /job sets jobs in DB
+- /jobs lists all active jobs currently active
